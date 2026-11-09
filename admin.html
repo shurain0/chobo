@@ -266,6 +266,7 @@ textarea{width:100%;box-sizing:border-box;min-height:140px;font-size:14px;border
 .tabs2{display:flex;gap:8px;margin:10px 0}.tabs2 button{flex:1;border:none;border-radius:999px;padding:10px;background:var(--chip);font-weight:800}.tabs2 button.on{background:var(--hp);color:#fff}
 details summary{cursor:pointer;color:var(--mp)}
 .small{font-size:12px;color:var(--sub)}
+.stopb{border:none;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;background:var(--chip);color:var(--hp)}.stopb.on{background:var(--ok);color:#fff}
 </style>
 <script src="firebase/firebase-app-compat.js"></script>
 <script src="firebase/firebase-auth-compat.js"></script>
@@ -283,8 +284,9 @@ let fbAuth=null,fs=null,TAB="acc";
 const fmt=t=>t?new Date(t).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
 function login(msg){$$("app").innerHTML=`<div class="gate"><div class="card"><h1 class="px">ちょぼ 管理画面</h1><label>管理人のパスワード</label><input id="pw" type="password"><p class="gerr" id="gerr">${msg||""}</p><button class="btn" id="go">ログイン</button></div></div>`;
   $$("go").onclick=async()=>{try{await fbAuth.signInWithEmailAndPassword(ADMIN_EMAIL,$$("pw").value);}catch(e){$$("gerr").textContent="パスワードがちがいます";}};}
-async function load(){const [ms,ls]=await Promise.all([fs.collection("members").get(),fs.collection("logins").get()]);
-  const L={};ls.docs.forEach(d=>L[d.id]=d.data());return ms.docs.map(d=>Object.assign({no:d.id},d.data(),{lg:L[d.id]||null})).sort((a,b)=>a.no.localeCompare(b.no));}
+async function load(){const [ms,ls,rs]=await Promise.all([fs.collection("members").get(),fs.collection("logins").get(),fs.collection("roster").get()]);const RS={};rs.docs.forEach(d=>RS[d.id]=d.data().name||"");
+  for(const d of ms.docs){const v=d.data();if(v.name!==undefined){if(v.name&&!RS[d.id]){await fs.doc("roster/"+d.id).set({name:v.name});RS[d.id]=v.name;}await fs.doc("members/"+d.id).set({name:firebase.firestore.FieldValue.delete()},{merge:true});}}
+  const L={};ls.docs.forEach(d=>L[d.id]=d.data());return ms.docs.map(d=>Object.assign({no:d.id},d.data(),{name:RS[d.id]||"",lg:L[d.id]||null})).sort((a,b)=>a.no.localeCompare(b.no));}
 function flags(m){const f=[];const lg=m.lg;const now=Date.now();
   if(m.active===false)f.push(["t-off","停止中"]);
   if(!lg){if(m.createdAt&&now-m.createdAt>3*864e5)f.push(["t-warn","3日以上ログインなし"]);else f.push(["t-off","未ログイン"]);return f;}
@@ -294,13 +296,12 @@ function flags(m){const f=[];const lg=m.lg;const now=Date.now();
   if(!f.length)f.push(["t-ok","問題なし"]);return f;}
 async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHTML='<p class="gerr">読み込めません（管理人としてログインしているか、ルールを確認してください）</p>';return;}
   const head=`<div class="top"><h1 class="px">ちょぼ 管理画面</h1><button class="link" id="out">ログアウト</button></div><div class="tabs2"><button data-t="acc" class="${TAB==="acc"?"on":""}">アカウントの状況</button><button data-t="new" class="${TAB==="new"?"on":""}">アカウントを作る</button><button data-t="up" class="${TAB==="up"?"on":""}">問題データ</button><button data-t="bk" class="${TAB==="bk"?"on":""}">更新と控え</button></div>`;
-  if(TAB==="acc"){const warn=rows.filter(r=>flags(r).some(f=>f[0]!=="t-ok"));
+  if(TAB==="acc"){const PN={};try{(await fs.collection("players").get()).docs.forEach(d=>PN[d.id]=d.data().nick||"");}catch(e){}const warn=rows.filter(r=>flags(r).some(f=>f[0]!=="t-ok"));
     $$("app").innerHTML=head+`<div class="card"><b>${rows.length}アカウント</b>　注意あり ${warn.length}<p class="small">端末の種類と日時は、メンバーがログインしたときに記録されます。「別の端末でほぼ同時に利用」は、2台の端末の最後の利用が15分以内に重なった場合に出ます。</p></div>
-    <div class="card" style="overflow-x:auto"><table><tr><th>番号</th><th>名前</th><th>状態</th><th>初回</th><th>最終</th><th>回数</th><th>端末</th></tr>
+    <div class="card" style="overflow-x:auto"><table><tr><th>番号</th><th>名前（管理用）</th><th>ニックネーム</th><th>状態</th><th>初回</th><th>最終</th><th>回数</th><th>端末</th><th></th></tr>
     ${rows.map(m=>{const lg=m.lg||{};const devs=Object.values(lg.devices||{}).sort((a,b)=>b.last-a.last);
-      return `<tr><td><b>${m.no}</b></td><td>${m.name||""}</td><td>${flags(m).map(f=>`<span class="tag ${f[0]}">${f[1]}</span>`).join("")}</td><td>${fmt(lg.first)}</td><td>${fmt(lg.last)}</td><td>${lg.count||0}</td>
-      <td>${devs.length?`<details><summary>${devs.length}台</summary>${devs.map(d=>`<div class="small">${d.ua}　初回 ${fmt(d.first)}　最終 ${fmt(d.last)}</div>`).join("")}</details>`:"—"}</td></tr>
-      <tr><td></td><td colspan="6"><button class="link" data-act="${m.no}">${m.active===false?"使えるようにする":"停止する"}</button></td></tr>`;}).join("")}</table></div>
+      return `<tr><td><b>${m.no}</b></td><td>${m.name||""}</td><td>${(PN[m.no]||"").replace(/</g,"&lt;")||"—"}</td><td>${flags(m).map(f=>`<span class="tag ${f[0]}">${f[1]}</span>`).join("")}</td><td>${fmt(lg.first)}</td><td>${fmt(lg.last)}</td><td>${lg.count||0}</td>
+      <td>${devs.length?`<details><summary>${devs.length}台</summary>${devs.map(d=>`<div class="small">${d.ua}　初回 ${fmt(d.first)}　最終 ${fmt(d.last)}</div>`).join("")}</details>`:"—"}</td><td style="white-space:nowrap"><button class="stopb${m.active===false?" on":""}" data-act="${m.no}">${m.active===false?"再開":"停止"}</button></td></tr>`;}).join("")}</table></div>
     <div class="card small">パスワードを忘れた人は、Firebaseの画面（Authentication）でその人のアカウントを削除してから、「アカウントを作る」で同じ番号を作り直してください。育成の記録は番号にひもづいているので消えません。</div>`;}
   else if(TAB==="bk"){let pub="—";try{const c=await fs.doc("config/app").get();if(c.exists)pub=c.data().version+"（"+fmt(c.data().at)+"）";}catch(e){}
     $$("app").innerHTML=head+`<div class="card"><b>1. 更新の前に：全員のデータの控えを取る</b><p class="small">名簿・ログインの記録・ひろば・各自の育成の記録を、1つのファイルに保存します。更新でトラブルがあっても、このファイルから戻せます。</p><button class="btn" id="exp">全員分の控えを保存する</button><p class="small" id="expm"></p></div>
@@ -310,7 +311,9 @@ async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHT
   else if(TAB==="up"){let info="まだ登録されていません";try{const c=await fs.doc("content/main").get();if(c.exists)info="登録済み："+fmt(c.data().updatedAt)+"（"+Math.round((c.data().size||0)/1024)+"K文字）";}catch(e){}
     $$("app").innerHTML=head+`<div class="card"><b>問題データの登録・更新</b><p class="small">現在：${info}</p><p class="small">手元の <b>tools/content.js</b> を選んで「登録する」を押します。このファイルはGitHubに上げないでください。メンバーが次にゲームを開くと、新しい問題が読み込まれます。</p>
     <input type="file" id="cf" accept=".js,text/javascript"><button class="btn" id="upb">登録する</button><p id="upm" class="small"></p></div>`;}
-  else{$$("app").innerHTML=head+`<div class="card"><b>アカウントをまとめて作る</b><p class="small">1行に「研修生番号,名前」を書いて貼り付けます。名前はひろばの初期表示名になります（本名でなくてかまいません）。初期パスワードは自動で作られ、最初のログインで本人が変更します。</p>
+  else{$$("app").innerHTML=head+`<div class="card"><b>アカウントをまとめて作る</b><p class="small">1行に「研修生番号,名前」を書いて貼り付けます。名前は管理用で、本人やほかのメンバーには表示されません（ニックネームは本人が最初のログインで決めます）。</p>
+    <label class="small">初期パスワード（空欄なら1人ずつ自動で作ります。決める場合は6文字以上・全員共通）</label><input id="ipw" placeholder="例：y=ax+b" style="width:100%;box-sizing:border-box;font-size:15px;padding:10px;border:none;border-radius:999px;background:var(--chip);color:var(--ink);margin:4px 0 4px">
+    <p class="small">共通の初期パスワードは、知っている人なら、まだ最初のログインをしていない人のアカウントに入れてしまいます。配ったら全員に早めにログインしてもらい、「初期パスワードのまま」の人がいないか確かめてください。</p>
     <textarea id="list" placeholder="101,たろう&#10;102,はなこ"></textarea><button class="btn" id="mk">作る</button><div id="res"></div></div>`;}
   document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{TAB=b.dataset.t;dash();});$$("out").onclick=()=>fbAuth.signOut();
   document.querySelectorAll("[data-act]").forEach(b=>b.onclick=async()=>{const no=b.dataset.act;const m=rows.find(r=>r.no===no);if(!confirm(no+" を"+(m.active===false?"使えるように":"停止")+"しますか？"))return;await fs.doc("members/"+no).set({active:m.active===false},{merge:true});dash();});
@@ -328,11 +331,11 @@ async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHT
     if(!/const ITEMS|ITEMS\s*=/.test(js)){$$("upm").textContent="問題データのファイルではないようです（tools/content.js を選んでください）";return;}
     try{await fs.doc("content/main").set({js,updatedAt:Date.now(),size:js.length});$$("upm").textContent="登録しました";setTimeout(dash,800);}catch(e){$$("upm").textContent="登録できませんでした："+(e.code||e.message);}};}
 function genPw(){const c="abcdefghjkmnpqrstuvwxyz23456789";let s="";const r=crypto.getRandomValues(new Uint32Array(10));for(const x of r)s+=c[x%c.length];return s;}
-async function makeAccounts(){const lines=$$("list").value.split(/\n/).map(l=>l.trim()).filter(Boolean);const out=[];const sec=firebase.apps.find(a=>a.name==="sec")||firebase.initializeApp(FIREBASE_CONFIG,"sec");const sa=sec.auth();
+async function makeAccounts(){const common=($$("ipw").value||"").trim();if(common&&common.length<6){$$("res").innerHTML='<p class="gerr">初期パスワードは6文字以上にしてください（Firebaseの決まりです）</p>';return;}const lines=$$("list").value.split(/\n/).map(l=>l.trim()).filter(Boolean);const out=[];const sec=firebase.apps.find(a=>a.name==="sec")||firebase.initializeApp(FIREBASE_CONFIG,"sec");const sa=sec.auth();
   $$("res").innerHTML='<p class="lv">作っています…</p>';
   for(const l of lines){const [no,name]=l.split(/[,，、\t]/).map(x=>(x||"").trim());if(!/^\d{3}$/.test(no)){out.push([l,"","番号が3桁ではありません"]);continue;}
-    const pw=genPw();let note="作成";try{await sa.createUserWithEmailAndPassword(no+"@"+ID_DOMAIN,pw);await sa.signOut();}catch(e){if((e.code||"").includes("email-already-in-use"))note="アカウントは既にあります（パスワードは変わりません）";else{out.push([no,"","失敗："+(e.code||e.message)]);continue;}}
-    await fs.doc("members/"+no).set({name:name||"",active:true,createdAt:Date.now()},{merge:true});out.push([no,note==="作成"?pw:"—",note+(name?"・"+name:"")]);}
+    const pw=common||genPw();let note="作成";try{await sa.createUserWithEmailAndPassword(no+"@"+ID_DOMAIN,pw);await sa.signOut();}catch(e){if((e.code||"").includes("email-already-in-use"))note="アカウントは既にあります（パスワードは変わりません）";else{out.push([no,"","失敗："+(e.code||e.message)]);continue;}}
+    await fs.doc("members/"+no).set({active:true,createdAt:Date.now()},{merge:true});if(name)await fs.doc("roster/"+no).set({name});out.push([no,note==="作成"?pw:"—",note+(name?"・"+name:"")]);}
   const csv="研修生番号,初期パスワード,メモ\n"+out.map(r=>r.join(",")).join("\n");
   $$("res").innerHTML=`<p><b>結果</b>（この画面を閉じると初期パスワードは二度と表示されません。必ず保存してください）</p><table><tr><th>番号</th><th>初期パスワード</th><th>メモ</th></tr>${out.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td></tr>`).join("")}</table><button class="btn" id="dl">CSVで保存</button>`;
   $$("dl").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv"}));a.download="accounts.csv";a.click();};}

@@ -436,7 +436,7 @@ function endBattle(force){if(!BT||BT.over)return;BT.over=true;const o=oppState()
   P.vs=P.vs||{w:0,l:0,d:0};if(res==="win")P.vs.w++;else if(res==="lose")P.vs.l++;else P.vs.d=(P.vs.d||0)+1;psave();syncMe();
   NET.room.presence({status:"lobby",bt:null,acc:null,inv:null});const s=BT.score,ng=BT.ng,blog=BT.log;BT=null;VIEW="res";
   $("#app").innerHTML=`<div class="card center">${petSVG()}<p class="px big">${res==="win"?"かち！":res==="lose"?"まけ…":"ひきわけ"}</p><p>60秒で正解　あなた ${s}問　あいて ${os}問</p><p class="lv">まちがい　あなた ${ng}　あいて ${ong}${BT===null&&s===os?"（同点のときは、まちがいが少ないほうの勝ち）":""}</p><p class="lv">通算 ${P.vs.w}勝 ${P.vs.l}敗${P.vs.d?" "+P.vs.d+"分":""}　ごきげんが上がった！</p><button class="btn" data-a="vs">もう一度たいせん</button><button class="btn ghost" data-a="home">ホームへ</button></div>${reviewList(blog,"たいせんの問題")}`;}
-function nickForm(){return `<div class="card nick"><p class="sec px">ニックネーム</p><div class="nrow"><input id="nickin" maxlength="12" placeholder="例：ちょぼ使い" value="${esc(P.nick||"")}"><button class="btn sm" data-a="nicksave">保存</button></div><p class="lv">ひろば・ランキング・たいせんで、この名前が表示されます（12文字まで）。設定しないと、管理人が登録した名前で表示されます。</p></div>`;}
+function nickForm(){return `<div class="card nick"><p class="sec px">ニックネーム</p><div class="nrow"><input id="nickin" maxlength="12" placeholder="例：ちょぼ使い" value="${esc(P.nick||"")}"><button class="btn sm" data-a="nicksave">保存</button></div><p class="lv">ひろば・ランキング・たいせんで、この名前が表示されます（12文字まで）。</p></div>`;}
 document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||b.dataset.a!=="nicksave")return;const v=(document.getElementById("nickin")||{}).value||"";P.nick=v.trim().slice(0,12);psave();NET.last="";syncMe();if(NET.room){try{NET.room.presence({nick:P.nick});}catch(e){}}plaza();},true);
 
 /* ===== データ保存の仕組みで動くロビー（ライブ機能を使わない） ===== */
@@ -588,17 +588,24 @@ document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||
 
 /* ===== データの引っ越し（書き出し・読み込み） ===== */
 function migEncode(){const u=new TextEncoder().encode(JSON.stringify(P));let s="";for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return "CHOBO1:"+btoa(s);}
-function migDecode(t){t=String(t).trim();if(!t.startsWith("CHOBO1:"))throw new Error("コードの形がちがいます");const b=atob(t.slice(7).replace(/\s/g,""));const u=Uint8Array.from(b,c=>c.charCodeAt(0));const o=JSON.parse(new TextDecoder().decode(u));if(!o||typeof o!=="object"||!o.exp)throw new Error("ちょぼのデータではありません");return o;}
+function migDecode(t){t=String(t||"").trim();const i=t.indexOf("CHOBO1:");if(i<0)throw new Error("「CHOBO1:」で始まるコードではありません");
+  let b=t.slice(i+7).replace(/[\r\n\t\u3000]/g,"").replace(/ /g,"+").replace(/-/g,"+").replace(/_/g,"/").replace(/[^A-Za-z0-9+/=]/g,"");
+  if(b.length%4===1)throw new Error("コードが途中で切れています（"+b.length+"文字）。ファイルを選んで読み込んでください");
+  while(b.length%4)b+="=";let o;
+  try{const s=atob(b);const u=Uint8Array.from(s,c=>c.charCodeAt(0));o=JSON.parse(new TextDecoder().decode(u));}catch(e){throw new Error("コードが途中で切れているか、形がちがいます（"+b.length+"文字）。ファイルを選んで読み込んでください");}
+  if(!o||typeof o!=="object"||!o.exp)throw new Error("ちょぼのデータではありません");return o;}
 function migCard(){return `<div class="card mig"><p class="sec px">データの引っ越し</p>
   <p class="lv">別のゲーム（班メンバー版など）にちょぼを連れていくときに使います。</p>
   <button class="btn ghost" data-mig="out">引っ越し用のコードを出す</button><div id="migout"></div>
   ${(P.bkList||[]).length?`<details class="full"><summary>自動の控えから戻す（${(P.bkList||[]).length}日分）</summary><p class="lv">毎日1回、その日の状態を控えとして保存しています。戻すと、いまのちょぼはその日の状態で上書きされます。</p>${[...(P.bkList||[])].reverse().map(d=>`<button class="btn ghost sm2" data-bk="${d}">${d} の状態に戻す</button>`).join("")}<p class="lv" id="bkmsg"></p></details>`:""}
-  <details class="full"><summary>引っ越し用のコードを読み込む</summary><p class="lv">いまのちょぼは、読み込んだデータで上書きされます。</p><textarea id="migin" rows="4" placeholder="CHOBO1: で始まるコードを貼る"></textarea><input type="file" id="migfile" accept=".txt,text/plain"><button class="btn" data-mig="in">読み込む</button><p class="lv" id="migmsg"></p></details></div>`;}
+  <details class="full"><summary>引っ越し用のコードを読み込む</summary><p class="lv">いまのちょぼは、読み込んだデータで上書きされます。</p><p class="lv"><b>おすすめ：</b>コードを保存したファイルを選ぶ（長いコードは、コピーや貼り付けの途中で切れることがあります）。</p><input type="file" id="migfile" accept=".txt,text/plain"><p class="lv">または、コードを貼る：</p><textarea id="migin" rows="4" placeholder="CHOBO1: で始まるコードを貼る"></textarea><button class="btn" data-mig="in">読み込む</button><p class="lv" id="migmsg"></p></details></div>`;}
 const _dexM=window.dex;window.dex=function(){_dexM();const app=document.getElementById("app");if(app)app.insertAdjacentHTML("beforeend",migCard());};
 document.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b||!b.dataset.mig)return;
-  if(b.dataset.mig==="out"){const code=migEncode();document.getElementById("migout").innerHTML=`<textarea id="migcode" rows="5" readonly>${code}</textarea><button class="btn" data-mig="copy">コピーする</button><p class="lv">このコードには、あなたのちょぼの育ち具合・記録・まちがいリスト・チェック帳が入っています。自分以外に渡さないでください。</p>`;return;}
+  if(b.dataset.mig==="out"){const code=migEncode();document.getElementById("migout").innerHTML=`<textarea id="migcode" rows="5" readonly>${code}</textarea><button class="btn" data-mig="copy">コピーする</button><button class="btn ghost" data-mig="save">ファイルに保存する</button><p class="lv">コードは${code.length.toLocaleString()}文字です。貼り付けたあと、最後の文字が「${code.slice(-8)}」になっているか確かめてください。</p><p class="lv">このコードには、あなたのちょぼの育ち具合・記録・まちがいリスト・チェック帳が入っています。自分以外に渡さないでください。</p>`;return;}
+  if(b.dataset.mig==="save"){const code=document.getElementById("migcode").value;try{const d=window.claude&&window.claude.use?await window.claude.use("downloads"):null;if(d){await d.save({filename:"chobo_code.txt",data:code});return;}}catch(x){}
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([code],{type:"text/plain"}));a.download="chobo_code.txt";document.body.appendChild(a);a.click();a.remove();return;}
   if(b.dataset.mig==="copy"){const ta=document.getElementById("migcode");ta.select();let ok=false;try{await navigator.clipboard.writeText(ta.value);ok=true;}catch(x){try{ok=document.execCommand("copy");}catch(y){}}b.textContent=ok?"コピーしました":"長押しして全選択→コピーしてください";return;}
-  if(b.dataset.mig==="in"){const msg=document.getElementById("migmsg");try{let t=document.getElementById("migin").value;const f=document.getElementById("migfile").files[0];if(!t.trim()&&f)t=await f.text();
+  if(b.dataset.mig==="in"){const msg=document.getElementById("migmsg");try{const f=document.getElementById("migfile").files[0];let t=f?await f.text():document.getElementById("migin").value;
       const o=migDecode(t);const tot=Object.values(o.exp||{}).reduce((a,c)=>a+c,0);
       if(!confirm(`そだち${tot}・解いた問題${Object.keys(o.hist||{}).length}問のちょぼを読み込みます。いまのちょぼは上書きされます。よろしいですか？`))return;
       P=migrateP(Object.assign(fresh(),o));P.allowShrink=true;P.syncedAt=Date.now();P.upd=Date.now();P.t=Date.now();P.tf=Date.now();P.tm=Date.now();psave();

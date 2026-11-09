@@ -543,20 +543,24 @@ async function wipeDevice(msg){try{localStorage.removeItem("zaihyo-pet-v1");loca
   try{await fbAuth.signOut();}catch(e){}try{await fs.terminate();await fs.clearPersistence();}catch(e){}
   try{if(window.indexedDB&&indexedDB.databases){for(const d of await indexedDB.databases())if(/firestore/i.test(d.name||""))indexedDB.deleteDatabase(d.name);}}catch(e){}
   alert(msg||"このアカウントは管理人によって停止されました。この端末の問題と記録を消去しました。");location.replace(location.pathname);}
-function gate(html){$$("gatecard").innerHTML='<h1 class="px" style="color:var(--hp);margin:0 0 10px">ちょぼを育てる</h1>'+html;}
+function gate(html){if(!$$("gatecard")){$$("app").innerHTML='<div class="gate"><div class="card" id="gatecard"></div></div>';const lo=document.querySelector(".logout");if(lo)lo.remove();}$$("gatecard").innerHTML='<h1 class="px" style="color:var(--hp);margin:0 0 10px">ちょぼを育てる</h1>'+html;}
 function loginForm(msg){gate(`<label>研修生番号（3桁）</label><input id="no" inputmode="numeric" maxlength="3" autocomplete="username" placeholder="例：123">
 <label>パスワード</label><input id="pw" type="password" autocomplete="current-password">
-<p class="gerr" id="gerr">${msg||""}</p><button class="btn" id="go">ログイン</button>
-<p class="note" style="margin-top:12px">このゲームは、管理人が登録したメンバーだけが使えます。使い方を確認するため、ログインした日時と端末の種類（例：iPhone・Safari）を記録します。場所やIPアドレスは記録しません。</p>`);
+<p class="gerr" id="gerr">${msg||""}</p><button class="btn" id="go">ログイン</button>`);
   const go=async()=>{const no=$$("no").value.trim(),pw=$$("pw").value;if(!/^\d{3}$/.test(no)){$$("gerr").textContent="研修生番号は3桁の数字で入れてください";return;}
     $$("gerr").textContent="ログインしています…";try{await fbAuth.signInWithEmailAndPassword(no+"@"+ID_DOMAIN,pw);}catch(e){$$("gerr").textContent=/disabled/.test(e.code||"")?"このアカウントは停止されています。管理人に連絡してください":"番号かパスワードがちがいます";}};
   $$("go").onclick=go;$$("pw").addEventListener("keydown",e=>{if(e.key==="Enter")go();});}
+function nickForm(){gate(`<p><b>ニックネームを決めてください</b><br>ひろば・ランキング・たいせんで、ほかのメンバーに表示される名前です（12文字まで）。本名でなくてかまいません。あとから変えられます。</p>
+<label>ニックネーム</label><input id="nk" maxlength="12" autocomplete="nickname" placeholder="例：ちょぼ使い">
+<p class="gerr" id="gerr"></p><button class="btn" id="go">決定してはじめる</button>`);
+  $$("go").onclick=async()=>{const v=$$("nk").value.trim();if(!v){$$("gerr").textContent="ニックネームを入れてください";return;}if(v.length>12){$$("gerr").textContent="12文字までにしてください";return;}
+    localStorage.setItem("chobo-newnick",v);fs.doc("logins/"+NO).set({nickSet:true},{merge:true}).catch(()=>{});start(true);};}
 function pwForm(){gate(`<p><b>はじめてのログインです。</b><br>自分だけのパスワードに変えてください（8文字以上）。</p>
 <label>新しいパスワード</label><input id="p1" type="password" autocomplete="new-password"><label>もう一度</label><input id="p2" type="password" autocomplete="new-password">
 <p class="gerr" id="gerr"></p><button class="btn" id="go">変更してはじめる</button>
 <p class="note">初期パスワードは、このあと使えなくなります。もし自分より先に誰かがパスワードを変えていた場合は、ログインできなくなるので、すぐ管理人に知らせてください。</p>`);
   $$("go").onclick=async()=>{const a=$$("p1").value,b=$$("p2").value;if(a.length<8){$$("gerr").textContent="8文字以上にしてください";return;}if(a!==b){$$("gerr").textContent="2つが一致しません";return;}
-    try{await fbAuth.currentUser.updatePassword(a);await fs.doc("logins/"+NO).set({pwChanged:true,pwAt:Date.now()},{merge:true});start();}catch(e){$$("gerr").textContent="変更できませんでした。もう一度ログインしてからやり直してください";}};}
+    try{await fbAuth.currentUser.updatePassword(a);await fs.doc("logins/"+NO).set({pwChanged:true,pwAt:Date.now()},{merge:true});nickForm();}catch(e){$$("gerr").textContent="変更できませんでした。もう一度ログインしてからやり直してください";}};}
 async function logLogin(){const ref=fs.doc("logins/"+NO);const s=await ref.get();const d=s.exists?s.data():{};const now=Date.now(),id=devId();const devs=d.devices||{};
   const dv=devs[id]||{ua:uaShort(),first:now};const recent=d.last&&now-d.last<10*60000&&devs[id];
   if(!recent){dv.last=now;dv.ua=uaShort();devs[id]=dv;ref.set({no:NO,first:d.first||now,last:now,count:(d.count||0)+1,devices:devs,pwChanged:!!d.pwChanged},{merge:true}).catch(()=>{});}
@@ -568,13 +572,13 @@ function shim(){const mp=p=>p.startsWith("data/users/")?"private/"+NO:p;const us
       return {onSnapshot:(f,e)=>c.onSnapshot(sn=>f({docs:sn.docs.map(d=>({id:d.id,data:()=>d.data()}))}),e||(()=>{})),doc:k=>wrapDoc(c.doc(k)),add:d=>c.add(d)};},doc:p=>wrapDoc(fs.doc(mp(p)))};
   const user={id:async()=>NO,me:async()=>({id:NO}),profiles:async()=>({})};
   window.claude={use:async n=>n==="db"?db:n==="user"?user:null};}
-async function start(){gate('<p class="lv" style="text-align:center">問題を読み込んでいます…</p>');
+async function start(skipNick){gate('<p class="lv" style="text-align:center">問題を読み込んでいます…</p>');
   try{const mem=await fs.doc("members/"+NO).get();const fromServer=!(mem.metadata&&mem.metadata.fromCache);if(!mem.exists||mem.data().active===false){if(fromServer){await wipeDevice("このアカウントは使えません。この端末の問題と記録を消去しました。管理人に連絡してください。");return;}await fbAuth.signOut();loginForm("このアカウントは使えません。管理人に連絡してください");return;}
-    const lg=await logLogin().catch(()=>({pwChanged:true}));if(!lg.pwChanged){pwForm();return;}
+    const lg=await logLogin().catch(()=>({pwChanged:true,nickSet:true}));if(!lg.pwChanged){pwForm();return;}if(!lg.nickSet&&!skipNick&&!localStorage.getItem("chobo-newnick")){nickForm();return;}
     const c=await fs.doc("content/main").get();if(!c.exists){gate('<p class="gerr">問題データがまだ登録されていません。管理人に連絡してください。</p>');return;}
-    const mname=mem.data().name||"";shim();$$("app").innerHTML="";await addScript(c.data().js);await addScript(null,"game.js?v="+encodeURIComponent(typeof APP_VERSION!=="undefined"?APP_VERSION:Date.now()));
+    shim();$$("app").innerHTML="";await addScript(c.data().js);await addScript(null,"game.js?v="+encodeURIComponent(typeof APP_VERSION!=="undefined"?APP_VERSION:Date.now()));
     watchVersion();
-    if(typeof P!=="undefined"&&!P.nick&&mname){P.nick=mname.slice(0,12);psave();if(typeof NET!=="undefined"){NET.last="";setTimeout(()=>syncMe(),1500);}}
+    const nn=localStorage.getItem("chobo-newnick");if(nn&&typeof P!=="undefined"){P.nick=nn.slice(0,12);P.nickSet=true;psave();localStorage.removeItem("chobo-newnick");if(typeof NET!=="undefined"){NET.last="";setTimeout(()=>syncMe(),1500);}}
     const lo=document.createElement("button");lo.className="logout";lo.textContent="ログアウト（研修生番号 "+NO+"）";lo.onclick=async()=>{await fbAuth.signOut();location.reload();};document.body.appendChild(lo);
     fs.doc("members/"+NO).onSnapshot(s=>{const fc=s.metadata&&s.metadata.fromCache;if(!fc&&(!s.exists||s.data().active===false))wipeDevice();},()=>{});
   }catch(e){console.error(e);gate(navigator.onLine?'<p class="gerr">読み込めませんでした。開き直してください。</p><button class="btn" onclick="location.reload()">開き直す</button>':'<p class="gerr">オフラインです。はじめての読み込みと、パスワードの変更にはネットが必要です。一度ネットにつながった状態で開いてください。</p><button class="btn" onclick="location.reload()">開き直す</button>');}}
