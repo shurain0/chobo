@@ -539,7 +539,7 @@ function uaShort(){const u=navigator.userAgent;const os=/iPhone/.test(u)?"iPhone
 
 let fbAuth=null,fs=null,NO=null;
 /* 管理人に停止された（または名簿から外された）とき：この端末の問題と記録をすべて消す */
-async function wipeDevice(msg){try{localStorage.removeItem("zaihyo-pet-v1");localStorage.removeItem("chobo-pw");sessionStorage.clear();}catch(e){}
+async function wipeDevice(msg){try{localStorage.removeItem("zaihyo-pet-v1");if(NO)localStorage.removeItem("zaihyo-pet-v1:"+NO);localStorage.removeItem("chobo-pw");sessionStorage.clear();}catch(e){}
   try{await fbAuth.signOut();}catch(e){}try{await fs.terminate();await fs.clearPersistence();}catch(e){}
   try{if(window.indexedDB&&indexedDB.databases){for(const d of await indexedDB.databases())if(/firestore/i.test(d.name||""))indexedDB.deleteDatabase(d.name);}}catch(e){}
   alert(msg||"このアカウントは管理人によって停止されました。この端末の問題と記録を消去しました。");location.replace(location.pathname);}
@@ -554,7 +554,7 @@ function nickForm(){gate(`<p><b>ニックネームを決めてください</b><b
 <label>ニックネーム</label><input id="nk" maxlength="12" autocomplete="nickname" placeholder="例：ちょぼ使い">
 <p class="gerr" id="gerr"></p><button class="btn" id="go">決定してはじめる</button>`);
   $$("go").onclick=async()=>{const v=$$("nk").value.trim();if(!v){$$("gerr").textContent="ニックネームを入れてください";return;}if(v.length>12){$$("gerr").textContent="12文字までにしてください";return;}
-    localStorage.setItem("chobo-newnick",v);fs.doc("logins/"+NO).set({nickSet:true},{merge:true}).catch(()=>{});start(true);};}
+    localStorage.setItem("chobo-newnick",NO+":"+v);fs.doc("logins/"+NO).set({nickSet:true},{merge:true}).catch(()=>{});start(true);};}
 function pwForm(){gate(`<p><b>はじめてのログインです。</b><br>自分だけのパスワードに変えてください（8文字以上）。</p>
 <label>新しいパスワード</label><input id="p1" type="password" autocomplete="new-password"><label>もう一度</label><input id="p2" type="password" autocomplete="new-password">
 <p class="gerr" id="gerr"></p><button class="btn" id="go">変更してはじめる</button>
@@ -574,12 +574,14 @@ function shim(){const mp=p=>p.startsWith("data/users/")?"private/"+NO:p;const us
   window.claude={use:async n=>n==="db"?db:n==="user"?user:null};}
 async function start(skipNick){gate('<p class="lv" style="text-align:center">問題を読み込んでいます…</p>');
   try{const mem=await fs.doc("members/"+NO).get();const fromServer=!(mem.metadata&&mem.metadata.fromCache);if(!mem.exists||mem.data().active===false){if(fromServer){await wipeDevice("このアカウントは使えません。この端末の問題と記録を消去しました。管理人に連絡してください。");return;}await fbAuth.signOut();loginForm("このアカウントは使えません。管理人に連絡してください");return;}
-    const lg=await logLogin().catch(()=>({pwChanged:true,nickSet:true}));if(!lg.pwChanged){pwForm();return;}if(!lg.nickSet&&!skipNick&&!localStorage.getItem("chobo-newnick")){nickForm();return;}
+    const lg=await logLogin().catch(()=>({pwChanged:true,nickSet:true}));if(!lg.pwChanged){pwForm();return;}if(!lg.nickSet&&!skipNick&&!(localStorage.getItem("chobo-newnick")||"").startsWith(NO+":")){nickForm();return;}
     const c=await fs.doc("content/main").get();if(!c.exists){gate('<p class="gerr">問題データがまだ登録されていません。管理人に連絡してください。</p>');return;}
-    shim();$$("app").innerHTML="";await addScript(c.data().js);await addScript(null,"game.js?v="+encodeURIComponent(typeof APP_VERSION!=="undefined"?APP_VERSION:Date.now()));
+    shim();window.CHOBO_PKEY="zaihyo-pet-v1:"+NO;
+    try{const old=localStorage.getItem("zaihyo-pet-v1");if(old){const o=JSON.parse(old);if(o&&o.owner===NO&&!localStorage.getItem(window.CHOBO_PKEY))localStorage.setItem(window.CHOBO_PKEY,old);localStorage.removeItem("zaihyo-pet-v1");}}catch(e){}
+    $$("app").innerHTML="";await addScript(c.data().js);await addScript(null,"game.js?v="+encodeURIComponent(typeof APP_VERSION!=="undefined"?APP_VERSION:Date.now()));
     watchVersion();
-    const nn=localStorage.getItem("chobo-newnick");if(nn&&typeof P!=="undefined"){P.nick=nn.slice(0,12);P.nickSet=true;psave();localStorage.removeItem("chobo-newnick");if(typeof NET!=="undefined"){NET.last="";setTimeout(()=>syncMe(),1500);}}
-    const lo=document.createElement("button");lo.className="logout";lo.textContent="ログアウト（研修生番号 "+NO+"）";lo.onclick=async()=>{await fbAuth.signOut();location.reload();};document.body.appendChild(lo);
+    const nn0=localStorage.getItem("chobo-newnick")||"";const nn=nn0.startsWith(NO+":")?nn0.slice(NO.length+1):"";if(nn0&&!nn)localStorage.removeItem("chobo-newnick");if(nn&&typeof P!=="undefined"){P.nick=nn.slice(0,12);P.nickSet=true;psave();localStorage.removeItem("chobo-newnick");if(typeof NET!=="undefined"){NET.last="";setTimeout(()=>syncMe(),1500);}}
+    const lo=document.createElement("button");lo.className="logout";lo.textContent="ログアウト（研修生番号 "+NO+"）";lo.onclick=async()=>{try{localStorage.removeItem("zaihyo-pet-v1:"+NO);localStorage.removeItem("chobo-newnick");}catch(e){}await fbAuth.signOut();location.reload();};document.body.appendChild(lo);
     fs.doc("members/"+NO).onSnapshot(s=>{const fc=s.metadata&&s.metadata.fromCache;if(!fc&&(!s.exists||s.data().active===false))wipeDevice();},()=>{});
   }catch(e){console.error(e);gate(navigator.onLine?'<p class="gerr">読み込めませんでした。開き直してください。</p><button class="btn" onclick="location.reload()">開き直す</button>':'<p class="gerr">オフラインです。はじめての読み込みと、パスワードの変更にはネットが必要です。一度ネットにつながった状態で開いてください。</p><button class="btn" onclick="location.reload()">開き直す</button>');}}
 function watchVersion(){try{fs.doc("config/app").onSnapshot(s=>{if(!s.exists)return;const d=s.data();const cur=typeof APP_VERSION!=="undefined"?APP_VERSION:"";

@@ -40,7 +40,7 @@ function speedPool(){
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 /* ===== ちょぼを育てる ===== */
-const PKEY="zaihyo-pet-v1";
+const PKEY=(typeof window!=="undefined"&&window.CHOBO_PKEY)||"zaihyo-pet-v1";
 const ORDER=["連結","税効果会計","減損","引当金","退職給付","ストック・オプション","資産除去債務","収益認識","金融商品（有価証券）","リース","企業結合","外貨換算","包括利益・CF計算書"];
 let P=null;
 function fresh(){return {name:"ちょぼ",born:Date.now(),t:Date.now(),tf:Date.now(),tm:Date.now(),hist:{},stat:{},food:3,mood:3,sick:false,exp:{},act:{eat:0,play:0,study:0},best:0,miss:[],log:{},hungryAt:null};}
@@ -339,11 +339,15 @@ function gsyncPush(){if(!GS.on||!GS.doc)return;
   if(GS.busy){GS.again=true;return;}clearTimeout(GS.t);GS.t=setTimeout(async()=>{GS.busy=true;try{await GS.doc.set({s:JSON.stringify(P),upd:P.upd||Date.now()});GS.cloudProg=Math.max(GS.cloudProg,prog(P));if(P.allowShrink){delete P.allowShrink;}await dailyBackup();}catch(e){}GS.busy=false;if(GS.again){GS.again=false;gsyncPush();}},5000);}
 const prog=x=>x?Object.values(x.exp||{}).reduce((a,b)=>a+b,0)+Object.keys(x.hist||{}).length+((x.act||{}).eat||0)+((x.act||{}).play||0)+((x.act||{}).study||0):0;
 async function gsyncInit(){try{if(!window.claude||!window.claude.use)return;const db=await window.claude.use("db"),u=await window.claude.use("user");if(!db||!u)return;const id=await u.id();if(!id)return;
+  /* 別のアカウントのデータを読み込まない（端末に別の人のちょぼが残っていたら、まっさらから始める） */
+  if(P.owner&&P.owner!==id){P=migrateP(fresh());try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}homeP();}
+  P.owner=id;
   GS.col=db.collection("data/users/"+id);GS.doc=GS.col.doc("chobo");const snap=await GS.doc.get();
   let take=false,R=null;if(snap&&snap.exists){const r=snap.data();try{R=JSON.parse(r.s);}catch(e){}
+    if(R&&R.owner&&R.owner!==id)R=null;
     if(R){ GS.cloudProg=prog(R); if(!P.syncedAt) take=prog(R)>=prog(P); else take=(r.upd||0)>(P.upd||0); }}
   GS.on=true;
-  if(take){P=migrateP(R);P.syncedAt=Date.now();try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}if(typeof NET!=="undefined"){NET.last="";syncMe();}if(!Q&&!SP&&!TQ)homeP();return;}
+  if(take){P=migrateP(R);P.owner=id;P.syncedAt=Date.now();try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}if(typeof NET!=="undefined"){NET.last="";syncMe();}if(!Q&&!SP&&!TQ)homeP();return;}
   P.syncedAt=Date.now();psave();}catch(e){}}
 
 /* 1日1回、その日の状態を控えとして保存（14日分） */
@@ -436,7 +440,7 @@ function endBattle(force){if(!BT||BT.over)return;BT.over=true;const o=oppState()
   P.vs=P.vs||{w:0,l:0,d:0};if(res==="win")P.vs.w++;else if(res==="lose")P.vs.l++;else P.vs.d=(P.vs.d||0)+1;psave();syncMe();
   NET.room.presence({status:"lobby",bt:null,acc:null,inv:null});const s=BT.score,ng=BT.ng,blog=BT.log;BT=null;VIEW="res";
   $("#app").innerHTML=`<div class="card center">${petSVG()}<p class="px big">${res==="win"?"かち！":res==="lose"?"まけ…":"ひきわけ"}</p><p>60秒で正解　あなた ${s}問　あいて ${os}問</p><p class="lv">まちがい　あなた ${ng}　あいて ${ong}${BT===null&&s===os?"（同点のときは、まちがいが少ないほうの勝ち）":""}</p><p class="lv">通算 ${P.vs.w}勝 ${P.vs.l}敗${P.vs.d?" "+P.vs.d+"分":""}　ごきげんが上がった！</p><button class="btn" data-a="vs">もう一度たいせん</button><button class="btn ghost" data-a="home">ホームへ</button></div>${reviewList(blog,"たいせんの問題")}`;}
-function nickForm(){return `<div class="card nick"><p class="sec px">ニックネーム</p><div class="nrow"><input id="nickin" maxlength="12" placeholder="例：ちょぼ使い" value="${esc(P.nick||"")}"><button class="btn sm" data-a="nicksave">保存</button></div><p class="lv">ひろば・ランキング・たいせんで、この名前が表示されます（12文字まで）。</p></div>`;}
+function nickForm(){return `<div class="card nick"><p class="sec px">ニックネーム</p><div class="nrow"><input id="nickin" maxlength="12" placeholder="例：ちょぼ使い" value="${esc(P.nick||"")}"><button class="btn sm" data-a="nicksave">保存</button></div><p class="lv">ひろば・ランキング・たいせんで、この名前が表示されます（12文字まで）。設定しないと、管理人が登録した名前で表示されます。</p></div>`;}
 document.addEventListener("click",e=>{const b=e.target.closest("button");if(!b||b.dataset.a!=="nicksave")return;const v=(document.getElementById("nickin")||{}).value||"";P.nick=v.trim().slice(0,12);psave();NET.last="";syncMe();if(NET.room){try{NET.room.presence({nick:P.nick});}catch(e){}}plaza();},true);
 
 /* ===== データ保存の仕組みで動くロビー（ライブ機能を使わない） ===== */
@@ -608,14 +612,14 @@ document.addEventListener("click",async e=>{const b=e.target.closest("button");i
   if(b.dataset.mig==="in"){const msg=document.getElementById("migmsg");try{const f=document.getElementById("migfile").files[0];let t=f?await f.text():document.getElementById("migin").value;
       const o=migDecode(t);const tot=Object.values(o.exp||{}).reduce((a,c)=>a+c,0);
       if(!confirm(`そだち${tot}・解いた問題${Object.keys(o.hist||{}).length}問のちょぼを読み込みます。いまのちょぼは上書きされます。よろしいですか？`))return;
-      P=migrateP(Object.assign(fresh(),o));P.allowShrink=true;P.syncedAt=Date.now();P.upd=Date.now();P.t=Date.now();P.tf=Date.now();P.tm=Date.now();psave();
+      {const ow=P.owner;P=migrateP(Object.assign(fresh(),o));P.owner=ow;}P.allowShrink=true;P.syncedAt=Date.now();P.upd=Date.now();P.t=Date.now();P.tf=Date.now();P.tm=Date.now();psave();
       if(typeof NET!=="undefined"){NET.last="";try{syncMe();}catch(x){}}
       msg.textContent="読み込みました";setTimeout(()=>homeP(),600);}catch(x){msg.textContent="読み込めませんでした："+x.message;}}
 });
 
 document.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b||!b.dataset.bk)return;const msg=document.getElementById("bkmsg");
   try{if(!GS.col){msg.textContent="控えに接続できません";return;}const s=await GS.col.doc("bk_"+b.dataset.bk).get();if(!s.exists){msg.textContent="その日の控えが見つかりません";return;}
-    if(!confirm(b.dataset.bk+" の状態に戻しますか？　いまのちょぼは上書きされます。"))return;const keep=P.bkList;P=migrateP(JSON.parse(s.data().s));P.bkList=keep;P.allowShrink=true;P.syncedAt=Date.now();psave();
+    if(!confirm(b.dataset.bk+" の状態に戻しますか？　いまのちょぼは上書きされます。"))return;const keep=P.bkList,ow=P.owner;P=migrateP(JSON.parse(s.data().s));P.bkList=keep;P.owner=ow;P.allowShrink=true;P.syncedAt=Date.now();psave();
     if(typeof NET!=="undefined"){NET.last="";try{syncMe();}catch(x){}}msg.textContent="戻しました";setTimeout(()=>homeP(),600);}catch(x){msg.textContent="戻せませんでした："+x.message;}});
 
 /* ===== chillなBGMと効果音（すべてオリジナル。Web Audioでその場で合成） ===== */

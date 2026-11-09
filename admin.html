@@ -301,7 +301,7 @@ async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHT
     <div class="card" style="overflow-x:auto"><table><tr><th>番号</th><th>名前（管理用）</th><th>ニックネーム</th><th>状態</th><th>初回</th><th>最終</th><th>回数</th><th>端末</th><th></th></tr>
     ${rows.map(m=>{const lg=m.lg||{};const devs=Object.values(lg.devices||{}).sort((a,b)=>b.last-a.last);
       return `<tr><td><b>${m.no}</b></td><td>${m.name||""}</td><td>${(PN[m.no]||"").replace(/</g,"&lt;")||"—"}</td><td>${flags(m).map(f=>`<span class="tag ${f[0]}">${f[1]}</span>`).join("")}</td><td>${fmt(lg.first)}</td><td>${fmt(lg.last)}</td><td>${lg.count||0}</td>
-      <td>${devs.length?`<details><summary>${devs.length}台</summary>${devs.map(d=>`<div class="small">${d.ua}　初回 ${fmt(d.first)}　最終 ${fmt(d.last)}</div>`).join("")}</details>`:"—"}</td><td style="white-space:nowrap"><button class="stopb${m.active===false?" on":""}" data-act="${m.no}">${m.active===false?"再開":"停止"}</button></td></tr>`;}).join("")}</table></div>
+      <td>${devs.length?`<details><summary>${devs.length}台</summary>${devs.map(d=>`<div class="small">${d.ua}　初回 ${fmt(d.first)}　最終 ${fmt(d.last)}</div>`).join("")}</details>`:"—"}</td><td style="white-space:nowrap"><button class="stopb${m.active===false?" on":""}" data-act="${m.no}">${m.active===false?"再開":"停止"}</button> <button class="stopb" data-reset="${m.no}">記録リセット</button></td></tr>`;}).join("")}</table></div>
     <div class="card small">パスワードを忘れた人は、Firebaseの画面（Authentication）でその人のアカウントを削除してから、「アカウントを作る」で同じ番号を作り直してください。育成の記録は番号にひもづいているので消えません。</div>`;}
   else if(TAB==="bk"){let pub="—";try{const c=await fs.doc("config/app").get();if(c.exists)pub=c.data().version+"（"+fmt(c.data().at)+"）";}catch(e){}
     $$("app").innerHTML=head+`<div class="card"><b>1. 更新の前に：全員のデータの控えを取る</b><p class="small">名簿・ログインの記録・ひろば・各自の育成の記録を、1つのファイルに保存します。更新でトラブルがあっても、このファイルから戻せます。</p><button class="btn" id="exp">全員分の控えを保存する</button><p class="small" id="expm"></p></div>
@@ -317,6 +317,11 @@ async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHT
     <textarea id="list" placeholder="101,たろう&#10;102,はなこ"></textarea><button class="btn" id="mk">作る</button><div id="res"></div></div>`;}
   document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{TAB=b.dataset.t;dash();});$$("out").onclick=()=>fbAuth.signOut();
   document.querySelectorAll("[data-act]").forEach(b=>b.onclick=async()=>{const no=b.dataset.act;const m=rows.find(r=>r.no===no);if(!confirm(no+" を"+(m.active===false?"使えるように":"停止")+"しますか？"))return;await fs.doc("members/"+no).set({active:m.active===false},{merge:true});dash();});
+  document.querySelectorAll("[data-reset]").forEach(b=>b.onclick=async()=>{const no=b.dataset.reset;if(!confirm(no+" の育成の記録・ひろばの表示・ニックネームを消して、まっさらに戻します。元には戻せません。よろしいですか？"))return;
+    try{const now=Date.now();await fs.doc("private/"+no).set({s:JSON.stringify({owner:no,resetAt:now,syncedAt:now,upd:now}),upd:now});
+      const bk=await fs.collection("backups/"+no+"/days").get();for(const d of bk.docs)await fs.doc("backups/"+no+"/days/"+d.id).delete();
+      await fs.doc("players/"+no).set({nick:"",st:0,stage:"たね",type:"",total:0,best:0,weekKey:"",weekOk:0,updatedAt:now});
+      await fs.doc("logins/"+no).set({nickSet:false},{merge:true});alert(no+" の記録をリセットしました");dash();}catch(e){alert("リセットできませんでした："+(e.code||e.message));}});
   if($$("mk"))$$("mk").onclick=makeAccounts;
   if($$("exp"))$$("exp").onclick=async()=>{$$("expm").textContent="集めています…";try{const out={app:"chobo-members",at:Date.now(),version:typeof APP_VERSION!=="undefined"?APP_VERSION:"",members:{},logins:{},players:{},private:{}};
     for(const c of ["members","logins","players","private"]){const sn=await fs.collection(c).get();sn.docs.forEach(d=>out[c][d.id]=d.data());}
