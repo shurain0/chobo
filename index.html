@@ -581,7 +581,11 @@ async function start(skipNick){gate('<p class="lv" style="text-align:center">問
     $$("app").innerHTML="";await addScript(c.data().js);await addScript(null,"game.js?v="+encodeURIComponent(typeof APP_VERSION!=="undefined"?APP_VERSION:Date.now()));
     watchVersion();
     const nn0=localStorage.getItem("chobo-newnick")||"";const nn=nn0.startsWith(NO+":")?nn0.slice(NO.length+1):"";if(nn0&&!nn)localStorage.removeItem("chobo-newnick");if(nn&&typeof P!=="undefined"){P.nick=nn.slice(0,12);P.nickSet=true;psave();localStorage.removeItem("chobo-newnick");if(typeof NET!=="undefined"){NET.last="";setTimeout(()=>syncMe(),1500);}}
-    const lo=document.createElement("button");lo.className="logout";lo.textContent="ログアウト（研修生番号 "+NO+"）";lo.onclick=async()=>{try{localStorage.removeItem("zaihyo-pet-v1:"+NO);localStorage.removeItem("chobo-newnick");}catch(e){}await fbAuth.signOut();location.reload();};document.body.appendChild(lo);
+    const lo=document.createElement("button");lo.className="logout";lo.textContent="ログアウト（研修生番号 "+NO+"）";lo.onclick=async()=>{if(!navigator.onLine){alert("オフラインのためログアウトできません。まだアカウントに送っていない記録が消えてしまうので、ネットにつながってからログアウトしてください。");return;}
+      lo.disabled=true;lo.textContent="記録を保存しています…";
+      try{if(typeof GS!=="undefined"&&GS.doc&&typeof P!=="undefined"){clearTimeout(GS.t);await Promise.race([GS.doc.set({s:JSON.stringify(P),upd:P.upd||Date.now()}),new Promise((_,j)=>setTimeout(()=>j(new Error("timeout")),8000))]);}}
+      catch(e){lo.disabled=false;lo.textContent="ログアウト（研修生番号 "+NO+"）";alert("記録を保存できませんでした。ネットの状態を確かめて、もう一度押してください。");return;}
+      try{localStorage.removeItem("zaihyo-pet-v1:"+NO);localStorage.removeItem("chobo-newnick");}catch(e){}await fbAuth.signOut();location.reload();};document.body.appendChild(lo);
     fs.doc("members/"+NO).onSnapshot(s=>{const fc=s.metadata&&s.metadata.fromCache;if(!fc&&(!s.exists||s.data().active===false))wipeDevice();},()=>{});
   }catch(e){console.error(e);gate(navigator.onLine?'<p class="gerr">読み込めませんでした。開き直してください。</p><button class="btn" onclick="location.reload()">開き直す</button>':'<p class="gerr">オフラインです。はじめての読み込みと、パスワードの変更にはネットが必要です。一度ネットにつながった状態で開いてください。</p><button class="btn" onclick="location.reload()">開き直す</button>');}}
 function watchVersion(){try{fs.doc("config/app").onSnapshot(s=>{if(!s.exists)return;const d=s.data();const cur=typeof APP_VERSION!=="undefined"?APP_VERSION:"";
