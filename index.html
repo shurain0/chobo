@@ -578,9 +578,10 @@ async function start(skipNick){gate('<p class="lv" style="text-align:center">問
     const c=await fs.doc("content/main").get();if(!c.exists){gate('<p class="gerr">問題データがまだ登録されていません。管理人に連絡してください。</p>');return;}
     shim();window.CHOBO_PKEY="zaihyo-pet-v1:"+NO;
     try{const old=localStorage.getItem("zaihyo-pet-v1");if(old){const o=JSON.parse(old);if(o&&o.owner===NO&&!localStorage.getItem(window.CHOBO_PKEY))localStorage.setItem(window.CHOBO_PKEY,old);localStorage.removeItem("zaihyo-pet-v1");}}catch(e){}
+    {const nn0=localStorage.getItem("chobo-newnick")||"";window.CHOBO_PENDING_NICK=nn0.startsWith(NO+":")?nn0.slice(NO.length+1):null;}
     $$("app").innerHTML="";await addScript(c.data().js);await addScript(null,"game.js?v="+encodeURIComponent(typeof APP_VERSION!=="undefined"?APP_VERSION:Date.now()));
     watchVersion();
-    const nn0=localStorage.getItem("chobo-newnick")||"";const nn=nn0.startsWith(NO+":")?nn0.slice(NO.length+1):"";if(nn0&&!nn)localStorage.removeItem("chobo-newnick");if(nn&&typeof P!=="undefined"){P.nick=nn.slice(0,12);P.nickSet=true;psave();localStorage.removeItem("chobo-newnick");if(typeof NET!=="undefined"){NET.last="";setTimeout(()=>syncMe(),1500);}}
+    if(window.CHOBO_PENDING_NICK&&typeof applyPendingNick==="function")applyPendingNick(false);localStorage.removeItem("chobo-newnick");
     const lo=document.createElement("button");lo.className="logout";lo.textContent="ログアウト（研修生番号 "+NO+"）";lo.onclick=async()=>{if(!navigator.onLine){alert("オフラインのためログアウトできません。まだアカウントに送っていない記録が消えてしまうので、ネットにつながってからログアウトしてください。");return;}
       lo.disabled=true;lo.textContent="記録を保存しています…";
       try{if(typeof GS!=="undefined"&&GS.doc&&typeof P!=="undefined"){clearTimeout(GS.t);await Promise.race([GS.doc.set({s:JSON.stringify(P),upd:P.upd||Date.now()}),new Promise((_,j)=>setTimeout(()=>j(new Error("timeout")),8000))]);}}

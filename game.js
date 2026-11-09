@@ -333,6 +333,9 @@ function petProgress(){const m=MUST.filter(mastered).length,t=T45.filter(id=>(P.
   return `<div class="card pp"><b>試験の準備</b><div class="row"><span>必須ライン</span><span class="bar sm"><i style="width:${m/MUST.length*100}%"></i></span><span class="lv">${m}/${MUST.length}</span></div><div class="row"><span>理論45問</span><span class="bar sm"><i style="width:${t/T45.length*100}%"></i></span><span class="lv">${t}/${T45.length}</span></div>${nx?`<p class="lv">次のごはん：${stdOfId(nx)}（${{theory:"理論",calc:"計算",tf:"正誤"}[byIdG[nx].type]}）</p>`:""}</div>`;}
 /* --- アカウントへの保存 --- */
 const GS={on:false,doc:null,busy:false,again:false,cloudProg:0,col:null};
+/* 最初に決めたニックネームを、クラウドの読み込みが終わったあとにも必ず反映する */
+function applyPendingNick(done){const v=typeof window!=="undefined"&&window.CHOBO_PENDING_NICK;if(!v)return;P.nick=String(v).slice(0,12);P.nickSet=true;psave();
+  if(typeof NET!=="undefined"){NET.last="";try{syncMe();}catch(e){}}if(done)window.CHOBO_PENDING_NICK=null;}
 function gsyncPush(){if(!GS.on||!GS.doc)return;
   /* 守り：アカウントに保存されている進み具合より、大きく少ない状態では上書きしない（読み込みの失敗や不具合から守る） */
   if(!P.allowShrink&&GS.cloudProg>20&&prog(P)<GS.cloudProg*0.5){console.warn("保存を見送りました（進み具合が急に減ったため）");return;}
@@ -347,8 +350,8 @@ async function gsyncInit(){try{if(!window.claude||!window.claude.use)return;cons
     if(R&&R.owner&&R.owner!==id)R=null;
     if(R){ GS.cloudProg=prog(R); if(!P.syncedAt) take=prog(R)>=prog(P); else take=(r.upd||0)>(P.upd||0); }}
   GS.on=true;
-  if(take){P=migrateP(R);P.owner=id;P.syncedAt=Date.now();try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}if(typeof NET!=="undefined"){NET.last="";syncMe();}if(!Q&&!SP&&!TQ)homeP();return;}
-  P.syncedAt=Date.now();psave();}catch(e){}}
+  if(take){P=migrateP(R);P.owner=id;P.syncedAt=Date.now();try{localStorage.setItem(PKEY,JSON.stringify(P));}catch(e){}if(typeof NET!=="undefined"){NET.last="";syncMe();}applyPendingNick(true);if(!Q&&!SP&&!TQ)homeP();return;}
+  P.syncedAt=Date.now();psave();applyPendingNick(true);}catch(e){applyPendingNick(false);}}
 
 /* 1日1回、その日の状態を控えとして保存（14日分） */
 async function dailyBackup(){try{const d=new Date();const day=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");

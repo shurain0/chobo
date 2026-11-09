@@ -266,7 +266,7 @@ textarea{width:100%;box-sizing:border-box;min-height:140px;font-size:14px;border
 .tabs2{display:flex;gap:8px;margin:10px 0}.tabs2 button{flex:1;border:none;border-radius:999px;padding:10px;background:var(--chip);font-weight:800}.tabs2 button.on{background:var(--hp);color:#fff}
 details summary{cursor:pointer;color:var(--mp)}
 .small{font-size:12px;color:var(--sub)}
-.stopb{border:none;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;background:var(--chip);color:var(--hp)}.stopb.on{background:var(--ok);color:#fff}
+.stopb{border:none;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;background:var(--chip);color:var(--hp)}.stopb.on{background:var(--ok);color:#fff}.stopb.del{background:var(--hp);color:#fff}
 </style>
 <script src="firebase/firebase-app-compat.js"></script>
 <script src="firebase/firebase-auth-compat.js"></script>
@@ -301,8 +301,8 @@ async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHT
     <div class="card" style="overflow-x:auto"><table><tr><th>番号</th><th>名前（管理用）</th><th>ニックネーム</th><th>状態</th><th>初回</th><th>最終</th><th>回数</th><th>端末</th><th></th></tr>
     ${rows.map(m=>{const lg=m.lg||{};const devs=Object.values(lg.devices||{}).sort((a,b)=>b.last-a.last);
       return `<tr><td><b>${m.no}</b></td><td>${m.name||""}</td><td>${(PN[m.no]||"").replace(/</g,"&lt;")||"—"}</td><td>${flags(m).map(f=>`<span class="tag ${f[0]}">${f[1]}</span>`).join("")}</td><td>${fmt(lg.first)}</td><td>${fmt(lg.last)}</td><td>${lg.count||0}</td>
-      <td>${devs.length?`<details><summary>${devs.length}台</summary>${devs.map(d=>`<div class="small">${d.ua}　初回 ${fmt(d.first)}　最終 ${fmt(d.last)}</div>`).join("")}</details>`:"—"}</td><td style="white-space:nowrap"><button class="stopb${m.active===false?" on":""}" data-act="${m.no}">${m.active===false?"再開":"停止"}</button> <button class="stopb" data-reset="${m.no}">記録リセット</button></td></tr>`;}).join("")}</table></div>
-    <div class="card small">パスワードを忘れた人は、Firebaseの画面（Authentication）でその人のアカウントを削除してから、「アカウントを作る」で同じ番号を作り直してください。育成の記録は番号にひもづいているので消えません。</div>`;}
+      <td>${devs.length?`<details><summary>${devs.length}台</summary>${devs.map(d=>`<div class="small">${d.ua}　初回 ${fmt(d.first)}　最終 ${fmt(d.last)}</div>`).join("")}</details>`:"—"}</td><td style="white-space:nowrap"><button class="stopb${m.active===false?" on":""}" data-act="${m.no}">${m.active===false?"再開":"停止"}</button> <button class="stopb" data-reset="${m.no}">記録リセット</button> <button class="stopb del" data-del="${m.no}">削除</button></td></tr>`;}).join("")}</table></div>
+    <div class="card small"><b>パスワードを忘れた人</b>：Firebaseの画面（Authentication）でその人のログイン用アカウントだけを削除し、「アカウントを作る」で同じ番号を作り直してください。育成の記録は番号にひもづいているので消えません。<br><b>アカウントが不要になったとき</b>：この画面の「削除」でデータをすべて消してから、Firebaseの画面（Authentication）でログイン用アカウントも削除してください。</div>`;}
   else if(TAB==="bk"){let pub="—";try{const c=await fs.doc("config/app").get();if(c.exists)pub=c.data().version+"（"+fmt(c.data().at)+"）";}catch(e){}
     $$("app").innerHTML=head+`<div class="card"><b>1. 更新の前に：全員のデータの控えを取る</b><p class="small">名簿・ログインの記録・ひろば・各自の育成の記録を、1つのファイルに保存します。更新でトラブルがあっても、このファイルから戻せます。</p><button class="btn" id="exp">全員分の控えを保存する</button><p class="small" id="expm"></p></div>
     <div class="card"><b>2. 更新を知らせる</b><p class="small">GitHubのファイルを差し替え、version.js の数字を上げたあとで押します。古い版を開いているメンバーの画面に「新しい版があります」と表示され、ボタン1つで更新できます。</p>
@@ -322,6 +322,13 @@ async function dash(){let rows;try{rows=await load();}catch(e){$$("app").innerHT
       const bk=await fs.collection("backups/"+no+"/days").get();for(const d of bk.docs)await fs.doc("backups/"+no+"/days/"+d.id).delete();
       await fs.doc("players/"+no).set({nick:"",st:0,stage:"たね",type:"",total:0,best:0,weekKey:"",weekOk:0,updatedAt:now});
       await fs.doc("logins/"+no).set({nickSet:false},{merge:true});alert(no+" の記録をリセットしました");dash();}catch(e){alert("リセットできませんでした："+(e.code||e.message));}});
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{const no=b.dataset.del;
+    const typed=prompt(no+" のアカウントを完全に削除します。\n名簿・名前・ログインの記録・ひろばの表示・育成の記録・控えがすべて消え、元に戻せません。\n削除する場合は、確認のため番号（"+no+"）を入力してください。");
+    if(typed===null)return;if(typed.trim()!==no){alert("番号が一致しないので、削除しませんでした");return;}
+    try{const bk=await fs.collection("backups/"+no+"/days").get();for(const d of bk.docs)await fs.doc("backups/"+no+"/days/"+d.id).delete();
+      for(const p of ["private/","players/","bt/","logins/","roster/","members/"])await fs.doc(p+no).delete();
+      alert(no+" のデータを削除しました。\n最後に、Firebaseの「Authentication」→「ユーザー」で "+no+"@"+ID_DOMAIN+" も削除してください（管理画面からは消せません）。");dash();}
+    catch(e){alert("削除できませんでした："+(e.code||e.message)+"\n（Firebaseのルールを最新のものに貼り直しているか確かめてください）");}});
   if($$("mk"))$$("mk").onclick=makeAccounts;
   if($$("exp"))$$("exp").onclick=async()=>{$$("expm").textContent="集めています…";try{const out={app:"chobo-members",at:Date.now(),version:typeof APP_VERSION!=="undefined"?APP_VERSION:"",members:{},logins:{},players:{},private:{}};
     for(const c of ["members","logins","players","private"]){const sn=await fs.collection(c).get();sn.docs.forEach(d=>out[c][d.id]=d.data());}
